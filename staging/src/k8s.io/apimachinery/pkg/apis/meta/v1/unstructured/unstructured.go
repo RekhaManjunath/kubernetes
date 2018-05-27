@@ -397,3 +397,15 @@ func (u *Unstructured) GetClusterName() string {
 func (u *Unstructured) SetClusterName(clusterName string) {
 	u.setNestedField(clusterName, "metadata", "clusterName")
 }
+
+func (u *Unstructured) GetObservedGeneration() int64 {
+	val, found, err := NestedInt64(u.Object, "status", "observedGeneration")
+	if !found || err != nil {
+		return 0
+	}
+	return val
+}
+
+func (u *Unstructured) SetObservedGeneration(observedGeneration int64) {
+	u.setNestedField(observedGeneration, "status", "observedGeneration")
+}

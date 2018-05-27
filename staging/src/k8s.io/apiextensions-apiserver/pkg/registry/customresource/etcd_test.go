@@ -166,6 +166,7 @@ func TestGenerationNumber(t *testing.T) {
 	defer storage.CustomResource.Store.DestroyFunc()
 	modifiedRno := *validNewCustomResource()
 	modifiedRno.SetGeneration(10)
+	modifiedRno.SetObservedGeneration(5)
 	ctx := genericapirequest.NewDefaultContext()
 	cr, err := createCustomResource(storage.CustomResource, modifiedRno, t)
 	if err != nil {
@@ -178,11 +179,11 @@ func TestGenerationNumber(t *testing.T) {
 	storedCR, _ := etcdCR.(*unstructured.Unstructured)
 
 	// Generation initialization
-	if storedCR.GetGeneration() != 1 {
-		t.Fatalf("Unexpected generation number %v", storedCR.GetGeneration())
+	if storedCR.GetGeneration() != 1 || storedCR.GetObservedGeneration() != 0 {
+		t.Fatalf("unexpected metadata.Generation %v, status.observedGeneration %v", storedCR.GetGeneration(), storedCR.GetObservedGeneration())
 	}
 
-	// Updates to spec should increment the generation number
+	// Updates to spec should increment metadata.generation, but not status.observedGeneration
 	setSpecReplicas(storedCR, getSpecReplicas(storedCR)+1)
 	if _, _, err := storage.CustomResource.Update(ctx, storedCR.GetName(), rest.DefaultUpdatedObjectInfo(storedCR), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -192,11 +193,11 @@ func TestGenerationNumber(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	storedCR, _ = etcdCR.(*unstructured.Unstructured)
-	if storedCR.GetGeneration() != 2 {
-		t.Fatalf("Unexpected generation, spec: %v", storedCR.GetGeneration())
+	if storedCR.GetGeneration() != 2 || storedCR.GetObservedGeneration() != 0 {
+		t.Fatalf("unexpected metadata.Generation %v, status.observedGeneration %v", storedCR.GetGeneration(), storedCR.GetObservedGeneration())
 	}
 
-	// Updates to status should not increment the generation number
+	// Updates to status should not increment both metadata.generation and status.observedGeneration
 	setStatusReplicas(storedCR, getStatusReplicas(storedCR)+1)
 	if _, _, err := storage.CustomResource.Update(ctx, storedCR.GetName(), rest.DefaultUpdatedObjectInfo(storedCR), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc); err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -206,10 +207,9 @@ func TestGenerationNumber(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 	storedCR, _ = etcdCR.(*unstructured.Unstructured)
-	if storedCR.GetGeneration() != 2 {
-		t.Fatalf("Unexpected generation, spec: %v", storedCR.GetGeneration())
+	if storedCR.GetGeneration() != 2 || storedCR.GetObservedGeneration() != 0 {
+		t.Fatalf("unexpected metadata.Generation %v, status.observedGeneration %v", storedCR.GetGeneration(), storedCR.GetObservedGeneration())
 	}
-
 }
 
 func TestCategories(t *testing.T) {

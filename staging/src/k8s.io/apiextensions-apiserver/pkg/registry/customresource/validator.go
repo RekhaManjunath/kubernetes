@@ -52,7 +52,7 @@ func (a customResourceValidator) Validate(ctx context.Context, obj runtime.Objec
 		return field.ErrorList{field.Invalid(field.NewPath("metadata"), nil, err.Error())}
 	}
 
-	if errs := a.ValidateTypeMeta(ctx, u); len(errs) > 0 {
+	if errs := a.validateTypeMeta(ctx, u); len(errs) > 0 {
 		return errs
 	}
 
@@ -62,8 +62,9 @@ func (a customResourceValidator) Validate(ctx context.Context, obj runtime.Objec
 	if err = apiservervalidation.ValidateCustomResource(u.UnstructuredContent(), a.schemaValidator); err != nil {
 		allErrs = append(allErrs, field.Invalid(field.NewPath(""), u.UnstructuredContent(), err.Error()))
 	}
-	allErrs = append(allErrs, a.ValidateScaleSpec(ctx, u, scale)...)
-	allErrs = append(allErrs, a.ValidateScaleStatus(ctx, u, scale)...)
+	allErrs = append(allErrs, a.validateScaleSpec(ctx, u, scale)...)
+	allErrs = append(allErrs, a.validateScaleStatus(ctx, u, scale)...)
+	allErrs = append(allErrs, a.validateStatusObservedGeneration(ctx, u)...)
 
 	return allErrs
 }
@@ -82,7 +83,7 @@ func (a customResourceValidator) ValidateUpdate(ctx context.Context, obj, old ru
 		return field.ErrorList{field.Invalid(field.NewPath("metadata"), nil, err.Error())}
 	}
 
-	if errs := a.ValidateTypeMeta(ctx, u); len(errs) > 0 {
+	if errs := a.validateTypeMeta(ctx, u); len(errs) > 0 {
 		return errs
 	}
 
@@ -92,8 +93,9 @@ func (a customResourceValidator) ValidateUpdate(ctx context.Context, obj, old ru
 	if err = apiservervalidation.ValidateCustomResource(u.UnstructuredContent(), a.schemaValidator); err != nil {
 		allErrs = append(allErrs, field.Invalid(field.NewPath(""), u.UnstructuredContent(), err.Error()))
 	}
-	allErrs = append(allErrs, a.ValidateScaleSpec(ctx, u, scale)...)
-	allErrs = append(allErrs, a.ValidateScaleStatus(ctx, u, scale)...)
+	allErrs = append(allErrs, a.validateScaleSpec(ctx, u, scale)...)
+	allErrs = append(allErrs, a.validateScaleStatus(ctx, u, scale)...)
+	allErrs = append(allErrs, a.validateStatusObservedGeneration(ctx, u)...)
 
 	return allErrs
 }
@@ -112,7 +114,7 @@ func (a customResourceValidator) ValidateStatusUpdate(ctx context.Context, obj, 
 		return field.ErrorList{field.Invalid(field.NewPath("metadata"), nil, err.Error())}
 	}
 
-	if errs := a.ValidateTypeMeta(ctx, u); len(errs) > 0 {
+	if errs := a.validateTypeMeta(ctx, u); len(errs) > 0 {
 		return errs
 	}
 
@@ -122,12 +124,13 @@ func (a customResourceValidator) ValidateStatusUpdate(ctx context.Context, obj, 
 	if err = apiservervalidation.ValidateCustomResource(u.UnstructuredContent(), a.schemaValidator); err != nil {
 		allErrs = append(allErrs, field.Invalid(field.NewPath(""), u.UnstructuredContent(), err.Error()))
 	}
-	allErrs = append(allErrs, a.ValidateScaleStatus(ctx, u, scale)...)
+	allErrs = append(allErrs, a.validateScaleStatus(ctx, u, scale)...)
+	allErrs = append(allErrs, a.validateStatusObservedGeneration(ctx, u)...)
 
 	return allErrs
 }
 
-func (a customResourceValidator) ValidateTypeMeta(ctx context.Context, obj *unstructured.Unstructured) field.ErrorList {
+func (a customResourceValidator) validateTypeMeta(ctx context.Context, obj *unstructured.Unstructured) field.ErrorList {
 	typeAccessor, err := meta.TypeAccessor(obj)
 	if err != nil {
 		return field.ErrorList{field.Invalid(field.NewPath("kind"), nil, err.Error())}
@@ -143,7 +146,7 @@ func (a customResourceValidator) ValidateTypeMeta(ctx context.Context, obj *unst
 	return allErrs
 }
 
-func (a customResourceValidator) ValidateScaleSpec(ctx context.Context, obj *unstructured.Unstructured, scale *apiextensions.CustomResourceSubresourceScale) field.ErrorList {
+func (a customResourceValidator) validateScaleSpec(ctx context.Context, obj *unstructured.Unstructured, scale *apiextensions.CustomResourceSubresourceScale) field.ErrorList {
 	if scale == nil {
 		return nil
 	}
@@ -164,7 +167,7 @@ func (a customResourceValidator) ValidateScaleSpec(ctx context.Context, obj *uns
 	return allErrs
 }
 
-func (a customResourceValidator) ValidateScaleStatus(ctx context.Context, obj *unstructured.Unstructured, scale *apiextensions.CustomResourceSubresourceScale) field.ErrorList {
+func (a customResourceValidator) validateScaleStatus(ctx context.Context, obj *unstructured.Unstructured, scale *apiextensions.CustomResourceSubresourceScale) field.ErrorList {
 	if scale == nil {
 		return nil
 	}
@@ -191,5 +194,19 @@ func (a customResourceValidator) ValidateScaleStatus(ctx context.Context, obj *u
 		}
 	}
 
+	return allErrs
+}
+
+// validateStatusObservedGeneration validates that if status.ObservedGeneration exists, it is not negative.
+func (a customResourceValidator) validateStatusObservedGeneration(ctx context.Context, obj *unstructured.Unstructured) field.ErrorList {
+	var allErrs field.ErrorList
+
+	observedGeneration, exists, err := unstructured.NestedInt64(obj.UnstructuredContent(), "status", "observedGeneration")
+	if err != nil {
+		allErrs = append(allErrs, field.Invalid(field.NewPath("status.observedGeneration"), observedGeneration, err.Error()))
+	}
+	if exists && observedGeneration < 0 {
+		allErrs = append(allErrs, field.Invalid(field.NewPath("status.observedGeneration"), observedGeneration, "should be a non-negative integer"))
+	}
 	return allErrs
 }
